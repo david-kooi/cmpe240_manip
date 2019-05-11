@@ -1,0 +1,12 @@
+% Robot Parameters
+L1 = 1;
+L2 = 1;
+
+robot = robotics.RigidBodyTree('DataFormat','column','MaxNumBodies',3)
+
+body = robotics.RigidBody('link1');
+joint = robotics.Joint('joint1', 'revolute');
+setFixedTransform(joint,trvec2tform([0 0 0]));
+joint.JointAxis = [0 0 1];
+body.Joint = joint;
+addBody(robot, body, 'base');
