@@ -62,7 +62,7 @@ t_accum = []
 theta_accum = [];
 step_size = 0.01;
 t_i = 0:step_size:0.09;
-T = 2
+T = 5
 t_total = 0:step_size:T;
 
 %% Generate path
@@ -80,18 +80,16 @@ zf.xa = 0;   zf.ya = 0;
 
 [x_traj,y_traj, arc_length] = gen_pp_traj(z0, zf, T, step_size)
 
-global z_accum;
-global tau_accum;
+global 
 z_accum = [];
-tau_accum = [];
 for i = 1:step_size:T
     t = t_0 + t_i;
     
     x_traj_a = x_traj(i);
     y_traj_a = y_traj(i);
     z_ddt_ref = [x_traj_a; y_traj_a];
-    %z_ddt_ref = [1; 0];
-    [t,theta] = ode45(@(t,theta)manipulator_dynamics(t,theta,z_ddt_ref,step_size), t, theta_0); 
+    [t,state] = ode45(@(t,theta)manipulator_dynamics(t,theta,z_ddt_ref,step_size), t, theta_0); 
+    z_accum = [z_accum; z];
     
     t_0 = t(end);
     theta_0 = theta(end,:);
@@ -109,6 +107,7 @@ hold on
 %hold on
 show(robot, theta_f);
 hold on
+
 ax = gca;
 ax.Projection = 'orthographic';
 %plot(points(:,1),points(:,2),'k')
@@ -118,24 +117,10 @@ hold on
 %% Plot reference trajectory and real trajectory
 figure
 plot(t_total, x_traj(t_total));
-hold on
 
-figure
-plot(z_accum(1,:), z_accum(2,:));
 
-figure
-plot(tau_accum(:,1));
-hold on;
-plot(tau_accum(:,2));
-hold on
 
-% Animate
-% figure
-% ax = gca;
-% ax.Projection = 'orthographic';
-% %plot(points(:,1),points(:,2),'k')
-% axis([-2 2 -2 2])
-% hold on
+%% Animate
 % fps = 10;
 % r = robotics.Rate(fps);
 % for i = 1:length(theta_accum)
@@ -144,6 +129,13 @@ hold on
 %     waitfor(r);
 % end
 
+
+%plot(com(1),com(2),'or');
+view(2)
+ax = gca;
+ax.Projection = 'orthographic';
+hold on
+%axis([-0.1 0.7 -0.3 0.5])
 
 
 function dydt = manipulator_dynamics(t, y, z_ddt_ref, dt)
@@ -159,9 +151,6 @@ function dydt = manipulator_dynamics(t, y, z_ddt_ref, dt)
     if isempty(z_m1)
         z_m1 = 0;
     end
-    
-    global z_accum;
-    global tau_accum;
     
     global DR;
     global L1;
@@ -183,16 +172,12 @@ function dydt = manipulator_dynamics(t, y, z_ddt_ref, dt)
     delta = 1 + M2*R2^2;
     
     %% Joint Dynamics
-    y1(1) = y1(1) - pi/2; %% Some sin error
     M = [alpha + 2*beta*cos(y1(2)), delta + beta*cos(y1(2));...
          delta + beta*cos(y1(2)), delta];
     C = [-beta*sin(y1(2))*y2(2), -beta*sin(y1(2))*(y2(1)+y2(2));...
          beta*sin(y1(2))*y2(1), 0];
     N = [0.5*L1*M1*g*cos(y1(1)) + M2*g*(L1*cos(y1(1))+0.5*L2*cos(y1(1)+y1(2)));...
          0.5*L2*M2*g*cos(y1(1) + y1(2))];
-    y1(1) = y1(1) + pi/2; %% Some sin error
-
-     
      
     %% Jacobian
     J1 = -L1*sin(y1(1)) - L2*sin(y1(1))*cos(y1(2)) - L2*sin(y1(2))*cos(y1(1));
@@ -200,10 +185,8 @@ function dydt = manipulator_dynamics(t, y, z_ddt_ref, dt)
     J3 = L1*cos(y1(1)) - L2*sin(y1(1))*sin(y1(2)) + L2*cos(y1(1))*cos(y1(2));
     J4 = -L2*sin(y1(1))*sin(y1(2)) + L2*cos(y1(1))*cos(y1(2));
     J = [J1, J2; J3, J4];
-    
     J_inv = inv(J);
     J_inv_T = J_inv.';
-
     
     %% Compute velocities
     J_inv_dt = dt*(J_inv - J_inv_m1);
@@ -211,7 +194,6 @@ function dydt = manipulator_dynamics(t, y, z_ddt_ref, dt)
     
     [x,y]    = hand_forward_kin([y1(1), y1(2)]);
     z = [x;y];
-    z_accum = [z_accum, z];
     z_dt = dt*(z - z_m1);
     z_m1 = z;
     
@@ -224,8 +206,6 @@ function dydt = manipulator_dynamics(t, y, z_ddt_ref, dt)
     F  = Mt*z_ddt_ref + Ct*z_dt + Nt;
     tau = J.'*F;
  
-    tau_accum = [tau_accum; tau.'];
-    
     %% Return angular velocities
     dydt = [y2; M\(tau - C*y2 - N);];
 
