@@ -61,40 +61,47 @@ t_0 = 0;
 t_accum = []
 theta_accum = [];
 step_size = 0.01;
-t_i = 0:step_size:0.09;
+t_i = 0:0.005:0.01;
 T = 2
 t_total = 0:step_size:T;
 
+
 %% Generate path
-x_f = 1;
-y_f = 2;
 
-z0.x  = x_0; z0.y = y_0;
-z0.xv = 0;   z0.yv = 0;
-z0.xa = 0;   z0.ya = 0;
+%% Scenerio 1
+% Start (0,1) End: (1.29, 0.707)
+th1_f = 3*pi/4;
+th2_f = -3*pi/4;
 
-zf.x  = x_f; zf.y = y_f;
-zf.xv = 0;   zf.yv = 0;
-zf.xa = 0;   zf.ya = 0;
+%% Scenerio 2
+% Start: (0,1) End: 
+%th1_f = 0.26;
+%th2_f = -0.26*2;
 
+z0.x  = th1_0; z0.y = th2_0;
+z0.xv = 0;     z0.yv = 0;
+z0.xa = 0;     z0.ya = 0;
 
-[x_traj,y_traj, arc_length] = gen_pp_traj(z0, zf, T, step_size)
+zf.x  = th1_f; zf.y = th2_f;
+zf.xv = 0;     zf.yv = 0;
+zf.xa = 0;     zf.ya = 0;
+
+[th1_traj,th2_traj, arc_length] = gen_pp_traj(z0, zf, T, step_size)
 
 global z_accum;
 global tau_accum;
 z_accum = [];
 tau_accum = [];
-for i = 1:step_size:T
+
+for i = 0:step_size:T
     t = t_0 + t_i;
     
-    x_traj_a = x_traj(i);
-    y_traj_a = y_traj(i);
-    z_ddt_ref = [x_traj_a; y_traj_a];
-    %z_ddt_ref = [1; 0];
-    [t,theta] = ode45(@(t,theta)manipulator_dynamics(t,theta,z_ddt_ref,step_size), t, theta_0); 
+    th_ddt_ref = [th1_traj(i); th2_traj(i)];
+    %th_ddt_ref = [0; 0];
+    [t,theta] = ode45(@(t,theta)manipulator_dynamics(t,theta_0,th_ddt_ref,step_size), t, theta_0); 
     
     t_0 = t(end);
-    theta_0 = theta(end,:);
+    theta_0 = theta(end,:).';
     
     t_accum = [t_accum; t];
     theta_accum = [theta_accum; theta];
@@ -103,50 +110,82 @@ end
 last = theta(end,:);
 theta_f = last(1:2)';
 
-figure
-show(robot, [th1_0;th2_0]);
-hold on
-%hold on
-show(robot, theta_f);
-hold on
-ax = gca;
-ax.Projection = 'orthographic';
-%plot(points(:,1),points(:,2),'k')
-axis([-2 2 -2 2])
-hold on
-
-%% Plot reference trajectory and real trajectory
-figure
-plot(t_total, x_traj(t_total));
-hold on
-
-figure
-plot(z_accum(1,:), z_accum(2,:));
-
-figure
-plot(tau_accum(:,1));
-hold on;
-plot(tau_accum(:,2));
-hold on
-
-% Animate
 % figure
 % ax = gca;
 % ax.Projection = 'orthographic';
-% %plot(points(:,1),points(:,2),'k')
 % axis([-2 2 -2 2])
+% show(robot, [th1_0;th2_0]);
 % hold on
-% fps = 10;
-% r = robotics.Rate(fps);
-% for i = 1:length(theta_accum)
-%     show(robot, theta_accum(i,1:2)','PreservePlot',false);
-%     drawnow
-%     waitfor(r);
-% end
+% show(robot, theta_f);
 
 
+%% Plot reference trajectory and real trajectory
 
-function dydt = manipulator_dynamics(t, y, z_ddt_ref, dt)
+subplot(3,2,1)
+% %%Animate
+ax = gca;
+ax.Projection = 'orthographic';
+%plot(points(:,1),points(:,2),'k')
+axis([-0.5 3.5 -0.5 2])
+hold on
+fps = 15;
+r = robotics.Rate(fps);
+for i = 1:50:length(theta_accum)
+    show(robot, theta_accum(i,1:2)','PreservePlot',true);
+    drawnow
+    hold on
+    waitfor(r);
+end
+ title("Kinematic Motion");
+ xlabel("X");
+ ylabel("Y");
+
+ 
+subplot(3,2,2);
+time = 0:length(theta_accum(:,1))-1;
+time = time * step_size/3;
+plot(time, theta_accum(:,1));
+hold on
+plot(time, theta_accum(:,2));
+hold on
+title("Thetas");
+xlabel("Time");
+ylabel("Radians");
+legend("Theta_1", "Theta_2");
+axis([0 2 -3 3]);
+
+subplot(3,2,3);
+plot(z_accum(:,1), z_accum(:,2));
+title("End Effector Position");
+xlabel("X");
+ylabel("Y");
+axis([-0.5 3 0 2]);
+
+subplot(3,2,4);
+time = 0:length(tau_accum(1,:))-1;
+time = time * step_size/60;
+plot(time, tau_accum(1,:));
+hold on;
+plot(time, tau_accum(2,:));
+hold on
+title("Torque Applied");
+xlabel("Time");
+ylabel("Tau");
+legend("Joint_1", "Joint_2");
+axis([0 2 -30 10]);
+
+subplot(3,2,[5,6]);
+plot(t_total, th1_traj(t_total));
+hold on
+plot(t_total, th2_traj(t_total));
+hold on
+title("Acceleration Trajectories");
+legend("Theta_1 ", "Theta_2")
+xlabel("Time");
+ylabel("rad/s^2");
+
+
+function dydt = manipulator_dynamics(t, y, th_ddt_ref, dt)
     persistent J_inv_m1;
     persistent t_m1;
     persistent z_m1;
@@ -172,9 +211,6 @@ function dydt = manipulator_dynamics(t, y, z_ddt_ref, dt)
     g  = -9.81;
     y1 = y(1:2); % Joint Position
     y2 = y(3:4); % Joint Velocity
-    %tau = [0;0];
-
-    %y1(1) = y1(1) - pi/2; %% Some sin error
     
     R1 = L1/2;
     R2 = L2/2;
@@ -190,44 +226,20 @@ function dydt = manipulator_dynamics(t, y, z_ddt_ref, dt)
          beta*sin(y1(2))*y2(1), 0];
     N = [0.5*L1*M1*g*cos(y1(1)) + M2*g*(L1*cos(y1(1))+0.5*L2*cos(y1(1)+y1(2)));...
          0.5*L2*M2*g*cos(y1(1) + y1(2))];
-    y1(1) = y1(1) + pi/2; %% Some sin error
-
-     
-     
-    %% Jacobian
-    J1 = -L1*sin(y1(1)) - L2*sin(y1(1))*cos(y1(2)) - L2*sin(y1(2))*cos(y1(1));
-    J2 = -L2*sin(y1(1))*cos(y1(2)) - L2*sin(y1(2))*cos(y1(1));
-    J3 = L1*cos(y1(1)) - L2*sin(y1(1))*sin(y1(2)) + L2*cos(y1(1))*cos(y1(2));
-    J4 = -L2*sin(y1(1))*sin(y1(2)) + L2*cos(y1(1))*cos(y1(2));
-    J = [J1, J2; J3, J4];
-    
-    J_inv = inv(J);
-    J_inv_T = J_inv.';
+    %y1(1) = y1(1) + pi/2; %% Some sin error
 
     
-    %% Compute velocities
-    J_inv_dt = dt*(J_inv - J_inv_m1);
-    J_inv_m1 = J_inv;
+    y1(1) = y1(1) + pi/2;
+    [x,y] = hand_forward_kin(y1);
+    z = [x,y];
+    z_accum = [z_accum; z];
     
-    [x,y]    = hand_forward_kin([y1(1), y1(2)]);
-    z = [x;y];
-    z_accum = [z_accum, z];
-    z_dt = dt*(z - z_m1);
-    z_m1 = z;
+    tau = M*th_ddt_ref + C*y2 + N;
+    tau_accum = [tau_accum, tau];
     
-    %% Workspace Dynamics
-    Mt = J_inv_T*M*J_inv;
-    Ct = J_inv_T*(C*J_inv + M*J_inv_dt);
-    Nt = J_inv_T*N;
-    
-    %% Compute torque to follow the reference
-    F  = Mt*z_ddt_ref + Ct*z_dt + Nt;
-    tau = J.'*F;
- 
-    tau_accum = [tau_accum; tau.'];
-    
+    %tau = [0;0];
     %% Return angular velocities
-    dydt = [y2; M\(tau - C*y2 - N);];
+    dydt = [y2; M\(tau - C*y2 - N)];
 
 end
 
